@@ -1,0 +1,19 @@
+[project]
+name = "ib-image-classification"
+version = "0.1.0"
+description = "prueba de clasificacion de imagenes utilizando information bottleneck"
+authors = [
+    {name = "Jose Matamoros"}
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "tensorflow (>=2.19.0,<3.0.0)",
+    "jupyter (>=1.1.1,<2.0.0)",
+    "matplotlib (>=3.10.3,<4.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
