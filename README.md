@@ -1,6 +1,8 @@
 Para agilizar el levantamiento del proyecto, sugiero instalar make para que puedan ejecutar lo que está en el Makefile. (tarea para la casa)
 
-Dataset de: https://www.kaggle.com/datasets/samuelcortinhas/sports-balls-multiclass-image-classification
+Dataset de Sports Balls: https://www.kaggle.com/datasets/samuelcortinhas/sports-balls-multiclass-image-classification
+Dataset de Calltech: https://data.caltech.edu/records/mzrjq-6wc02
+
 
 Para crear la imagen:
 

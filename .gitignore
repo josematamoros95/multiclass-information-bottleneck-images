@@ -1,2 +1,6 @@
 # Ignorar carpeta de datos
 data/raw/sports_balls/
+data/raw/calltech/
+
+# Ignorar checkpoints de notebooks
+notebooks/.ipynb_checkpoints/
