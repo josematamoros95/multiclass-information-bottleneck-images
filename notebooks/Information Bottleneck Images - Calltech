@@ -1,0 +1,2885 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "a984c13c-020b-4ddf-bb1f-5d189509d6b1",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "2025-06-17 22:37:39.448122: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.\n",
+      "2025-06-17 22:37:39.449237: I external/local_xla/xla/tsl/cuda/cudart_stub.cc:32] Could not find cuda drivers on your machine, GPU will not be used.\n",
+      "2025-06-17 22:37:39.455973: I external/local_xla/xla/tsl/cuda/cudart_stub.cc:32] Could not find cuda drivers on your machine, GPU will not be used.\n",
+      "2025-06-17 22:37:39.481604: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:467] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered\n",
+      "WARNING: All log messages before absl::InitializeLog() is called are written to STDERR\n",
+      "E0000 00:00:1750199859.517070    2803 cuda_dnn.cc:8579] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered\n",
+      "E0000 00:00:1750199859.525699    2803 cuda_blas.cc:1407] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered\n",
+      "W0000 00:00:1750199859.555098    2803 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.\n",
+      "W0000 00:00:1750199859.555135    2803 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.\n",
+      "W0000 00:00:1750199859.555138    2803 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.\n",
+      "W0000 00:00:1750199859.555140    2803 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.\n",
+      "2025-06-17 22:37:39.562990: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.\n",
+      "To enable the following instructions: AVX2 AVX_VNNI FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.\n"
+     ]
+    }
+   ],
+   "source": [
+    "import tensorflow as tf\n",
+    "import numpy as np\n",
+    "import matplotlib.pyplot as plt\n",
+    "\n",
+    "from tensorflow.keras import layers, models, Model, losses\n",
+    "from tensorflow.keras.applications import ResNet50V2, ResNet101V2\n",
+    "from tensorflow.keras.applications.resnet_v2 import preprocess_input"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "b4ef36a1-d914-4bd8-94d9-954801493c76",
+   "metadata": {},
+   "source": [
+    "# Carga de Datos"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "3b2ae071-cbfc-4ff5-b89a-f530fd501052",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Found 9144 files belonging to 102 classes.\n",
+      "Using 7316 files for training.\n"
+     ]
+    },
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "2025-06-17 22:39:32.096005: E external/local_xla/xla/stream_executor/cuda/cuda_platform.cc:51] failed call to cuInit: INTERNAL: CUDA error: Failed call to cuInit: UNKNOWN ERROR (303)\n"
+     ]
+    }
+   ],
+   "source": [
+    "raw_train_ds = tf.keras.preprocessing.image_dataset_from_directory(\n",
+    "    \"../data/raw/calltech/caltech-101/caltech-101/101_ObjectCategories/101_ObjectCategories\",\n",
+    "    validation_split=0.2,\n",
+    "    subset=\"training\",\n",
+    "    seed=123,\n",
+    "    image_size=(224, 224),\n",
+    "    batch_size=32\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "aec9f68c-15fe-4701-958c-5fcecfd9901b",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Found 9144 files belonging to 102 classes.\n",
+      "Using 1828 files for validation.\n"
+     ]
+    }
+   ],
+   "source": [
+    "# Dataset de validación/test\n",
+    "raw_test_ds = tf.keras.preprocessing.image_dataset_from_directory(\n",
+    "    \"../data/raw/calltech/caltech-101/caltech-101/101_ObjectCategories/101_ObjectCategories\",\n",
+    "    validation_split=0.2,\n",
+    "    subset=\"validation\",\n",
+    "    seed=123,\n",
+    "    image_size=(224, 224),\n",
+    "    batch_size=32\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "id": "0d2beadd-7f11-4cfc-b6e2-9c48c5981a34",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "AUTOTUNE = tf.data.AUTOTUNE\n",
+    "train_ds = raw_train_ds.map(lambda x, y: (preprocess_input(x), y), num_parallel_calls=AUTOTUNE).prefetch(AUTOTUNE)\n",
+    "test_ds = raw_test_ds.map(lambda x, y: (preprocess_input(x), y), num_parallel_calls=AUTOTUNE).prefetch(AUTOTUNE)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "id": "dae2d039-c899-42be-9ebb-43b78d35fa74",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "class_names = raw_train_ds.class_names"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "id": "f9b51ffa-3c89-4bde-bf4e-a166fe603878",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "['BACKGROUND_Google', 'Faces', 'Faces_easy', 'Leopards', 'Motorbikes', 'accordion', 'airplanes', 'anchor', 'ant', 'barrel', 'bass', 'beaver', 'binocular', 'bonsai', 'brain', 'brontosaurus', 'buddha', 'butterfly', 'camera', 'cannon', 'car_side', 'ceiling_fan', 'cellphone', 'chair', 'chandelier', 'cougar_body', 'cougar_face', 'crab', 'crayfish', 'crocodile', 'crocodile_head', 'cup', 'dalmatian', 'dollar_bill', 'dolphin', 'dragonfly', 'electric_guitar', 'elephant', 'emu', 'euphonium', 'ewer', 'ferry', 'flamingo', 'flamingo_head', 'garfield', 'gerenuk', 'gramophone', 'grand_piano', 'hawksbill', 'headphone', 'hedgehog', 'helicopter', 'ibis', 'inline_skate', 'joshua_tree', 'kangaroo', 'ketch', 'lamp', 'laptop', 'llama', 'lobster', 'lotus', 'mandolin', 'mayfly', 'menorah', 'metronome', 'minaret', 'nautilus', 'octopus', 'okapi', 'pagoda', 'panda', 'pigeon', 'pizza', 'platypus', 'pyramid', 'revolver', 'rhino', 'rooster', 'saxophone', 'schooner', 'scissors', 'scorpion', 'sea_horse', 'snoopy', 'soccer_ball', 'stapler', 'starfish', 'stegosaurus', 'stop_sign', 'strawberry', 'sunflower', 'tick', 'trilobite', 'umbrella', 'watch', 'water_lilly', 'wheelchair', 'wild_cat', 'windsor_chair', 'wrench', 'yin_yang']\n"
+     ]
+    }
+   ],
+   "source": [
+    "print(class_names)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "id": "c71599f6-73f9-4fa3-9589-75265347c989",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "data_augmentation = tf.keras.Sequential([\n",
+    "    tf.keras.layers.RandomFlip(\"horizontal\"),\n",
+    "    tf.keras.layers.RandomRotation(0.1),\n",
+    "    tf.keras.layers.RandomZoom(0.1),\n",
+    "])\n",
+    "\n",
+    "# Se aplica como parte del modelo o en el mapeo:\n",
+    "train_ds = train_ds.map(lambda x, y: (data_augmentation(x, training=True), y))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "7b79eb21-059a-40e6-8c14-47d32cd887b2",
+   "metadata": {},
+   "source": [
+    "# Modelo Neuronal"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "id": "db9ee719-60ae-4719-b4e0-150a4e60c3e8",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Modelo base\n",
+    "#base_model = ResNet101V2(include_top=False, weights='imagenet', input_shape=(224, 224, 3))\n",
+    "#base_model.trainable = False"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 10,
+   "id": "d833eb9b-248f-45cc-8f41-6211d79987f6",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "class DeepIB(Model):\n",
+    "    def __init__(self, z_dim, sampling=1, beta=1.0):\n",
+    "        super(DeepIB, self).__init__()\n",
+    "        self.sampling = sampling\n",
+    "        self.beta = beta\n",
+    "\n",
+    "        self.base_model = ResNet101V2(include_top=False, weights='imagenet', input_shape=(224, 224, 3))\n",
+    "        self.base_model.trainable = False\n",
+    "\n",
+    "        # Encoder\n",
+    "        self.encoder_x = tf.keras.Sequential([\n",
+    "            tf.keras.Input(shape=(224, 224, 3)),\n",
+    "            self.base_model,\n",
+    "            layers.GlobalAveragePooling2D(),\n",
+    "            layers.BatchNormalization(),\n",
+    "            layers.Dense(512, activation='relu'),\n",
+    "            layers.Dropout(0.3)\n",
+    "        ])\n",
+    "        self.encoder_mu = layers.Dense(z_dim)\n",
+    "        self.encoder_logvar = layers.Dense(z_dim)\n",
+    "\n",
+    "        # Decoder\n",
+    "        self.decode_z = layers.Dense(len(class_names))  # Para clasificación en las clases\n",
+    "\n",
+    "    def encode(self, x):\n",
+    "        x = self.encoder_x(x)\n",
+    "        mu = self.encoder_mu(x)\n",
+    "        logvar = tf.clip_by_value(self.encoder_logvar(x), -10, 10)\n",
+    "        return mu, logvar\n",
+    "\n",
+    "    def reparametrize(self, mu, logvar):\n",
+    "        eps_shape = tf.concat([tf.shape(mu), [self.sampling]], axis=0)\n",
+    "        eps = tf.random.normal(eps_shape)\n",
+    "        sigma = tf.exp(0.5 * logvar)\n",
+    "        mu = tf.expand_dims(mu, -1)\n",
+    "        sigma = tf.expand_dims(sigma, -1)\n",
+    "        z = mu + sigma * eps\n",
+    "        z = tf.transpose(z, perm=[0, 2, 1])  # [batch, samples, z_dim]\n",
+    "        return z\n",
+    "\n",
+    "    def call(self, x, training=False):\n",
+    "        mu, logvar = self.encode(x)\n",
+    "        z = self.reparametrize(mu, logvar)\n",
+    "        y_pred = self.decode_z(z)  # [batch, samples, 10]\n",
+    "        return y_pred, mu, logvar\n",
+    "\n",
+    "    def compute_loss(self, x, y_true):\n",
+    "        y_pred, mu, logvar = self.call(x, training=True)\n",
+    "        y_pred = tf.reduce_mean(y_pred, axis=1)  # Promedio sobre muestras\n",
+    "        ce_loss = losses.SparseCategoricalCrossentropy(from_logits=True)(y_true, y_pred)\n",
+    "        # KL divergence\n",
+    "        var = tf.exp(logvar)\n",
+    "        kl = -0.5 * tf.reduce_sum(1 + tf.math.log(var) - tf.square(mu) - var, axis=1)\n",
+    "        _total_loss = tf.reduce_mean(ce_loss + self.beta * kl)\n",
+    "        # Accuracy\n",
+    "        _acc = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(y_pred, axis=1), tf.cast(y_true, tf.int64)), tf.float32))\n",
+    "        return _total_loss, _acc\n",
+    "\n",
+    "    def train_step(self, data):\n",
+    "        x, y = data\n",
+    "        with tf.GradientTape() as tape:\n",
+    "            loss, acc = self.compute_loss(x, y)\n",
+    "        grads = tape.gradient(loss, self.trainable_variables)\n",
+    "        self.optimizer.apply_gradients(zip(grads, self.trainable_variables))\n",
+    "        return {\"loss\": loss, \"accuracy\": acc}\n",
+    "\n",
+    "    def test_step(self, data):\n",
+    "        x, y = data\n",
+    "        loss, acc = self.compute_loss(x, y)\n",
+    "        return {\"loss\": loss, \"accuracy\": acc}"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 11,
+   "id": "a74ebc4e-906a-4fec-83bd-fe9ced97e188",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Instanciar y entrenar el modelo\n",
+    "model = DeepIB(z_dim=3, sampling=1, beta=1e-4)\n",
+    "model.compile(optimizer=tf.keras.optimizers.Adam())"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "id": "4fae46d1-df4d-40f8-b1e1-b39af11f195c",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<pre style=\"white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace\"><span style=\"font-weight: bold\">Model: \"deep_ib\"</span>\n",
+       "</pre>\n"
+      ],
+      "text/plain": [
+       "\u001b[1mModel: \"deep_ib\"\u001b[0m\n"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    },
+    {
+     "data": {
+      "text/html": [
+       "<pre style=\"white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace\">┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┓\n",
+       "┃<span style=\"font-weight: bold\"> Layer (type)                    </span>┃<span style=\"font-weight: bold\"> Output Shape           </span>┃<span style=\"font-weight: bold\">       Param # </span>┃\n",
+       "┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━┩\n",
+       "│ resnet101v2 (<span style=\"color: #0087ff; text-decoration-color: #0087ff\">Functional</span>)        │ (<span style=\"color: #00d7ff; text-decoration-color: #00d7ff\">None</span>, <span style=\"color: #00af00; text-decoration-color: #00af00\">7</span>, <span style=\"color: #00af00; text-decoration-color: #00af00\">7</span>, <span style=\"color: #00af00; text-decoration-color: #00af00\">2048</span>)     │    <span style=\"color: #00af00; text-decoration-color: #00af00\">42,626,560</span> │\n",
+       "├─────────────────────────────────┼────────────────────────┼───────────────┤\n",
+       "│ sequential_1 (<span style=\"color: #0087ff; text-decoration-color: #0087ff\">Sequential</span>)       │ (<span style=\"color: #00d7ff; text-decoration-color: #00d7ff\">None</span>, <span style=\"color: #00af00; text-decoration-color: #00af00\">512</span>)            │    <span style=\"color: #00af00; text-decoration-color: #00af00\">43,683,840</span> │\n",
+       "├─────────────────────────────────┼────────────────────────┼───────────────┤\n",
+       "│ dense_1 (<span style=\"color: #0087ff; text-decoration-color: #0087ff\">Dense</span>)                 │ (<span style=\"color: #00d7ff; text-decoration-color: #00d7ff\">None</span>, <span style=\"color: #00af00; text-decoration-color: #00af00\">3</span>)              │         <span style=\"color: #00af00; text-decoration-color: #00af00\">1,539</span> │\n",
+       "├─────────────────────────────────┼────────────────────────┼───────────────┤\n",
+       "│ dense_2 (<span style=\"color: #0087ff; text-decoration-color: #0087ff\">Dense</span>)                 │ (<span style=\"color: #00d7ff; text-decoration-color: #00d7ff\">None</span>, <span style=\"color: #00af00; text-decoration-color: #00af00\">3</span>)              │         <span style=\"color: #00af00; text-decoration-color: #00af00\">1,539</span> │\n",
+       "├─────────────────────────────────┼────────────────────────┼───────────────┤\n",
+       "│ dense_3 (<span style=\"color: #0087ff; text-decoration-color: #0087ff\">Dense</span>)                 │ (<span style=\"color: #00d7ff; text-decoration-color: #00d7ff\">None</span>, <span style=\"color: #00af00; text-decoration-color: #00af00\">1</span>, <span style=\"color: #00af00; text-decoration-color: #00af00\">102</span>)         │           <span style=\"color: #00af00; text-decoration-color: #00af00\">408</span> │\n",
+       "└─────────────────────────────────┴────────────────────────┴───────────────┘\n",
+       "</pre>\n"
+      ],
+      "text/plain": [
+       "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┓\n",
+       "┃\u001b[1m \u001b[0m\u001b[1mLayer (type)                   \u001b[0m\u001b[1m \u001b[0m┃\u001b[1m \u001b[0m\u001b[1mOutput Shape          \u001b[0m\u001b[1m \u001b[0m┃\u001b[1m \u001b[0m\u001b[1m      Param #\u001b[0m\u001b[1m \u001b[0m┃\n",
+       "┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━┩\n",
+       "│ resnet101v2 (\u001b[38;5;33mFunctional\u001b[0m)        │ (\u001b[38;5;45mNone\u001b[0m, \u001b[38;5;34m7\u001b[0m, \u001b[38;5;34m7\u001b[0m, \u001b[38;5;34m2048\u001b[0m)     │    \u001b[38;5;34m42,626,560\u001b[0m │\n",
+       "├─────────────────────────────────┼────────────────────────┼───────────────┤\n",
+       "│ sequential_1 (\u001b[38;5;33mSequential\u001b[0m)       │ (\u001b[38;5;45mNone\u001b[0m, \u001b[38;5;34m512\u001b[0m)            │    \u001b[38;5;34m43,683,840\u001b[0m │\n",
+       "├─────────────────────────────────┼────────────────────────┼───────────────┤\n",
+       "│ dense_1 (\u001b[38;5;33mDense\u001b[0m)                 │ (\u001b[38;5;45mNone\u001b[0m, \u001b[38;5;34m3\u001b[0m)              │         \u001b[38;5;34m1,539\u001b[0m │\n",
+       "├─────────────────────────────────┼────────────────────────┼───────────────┤\n",
+       "│ dense_2 (\u001b[38;5;33mDense\u001b[0m)                 │ (\u001b[38;5;45mNone\u001b[0m, \u001b[38;5;34m3\u001b[0m)              │         \u001b[38;5;34m1,539\u001b[0m │\n",
+       "├─────────────────────────────────┼────────────────────────┼───────────────┤\n",
+       "│ dense_3 (\u001b[38;5;33mDense\u001b[0m)                 │ (\u001b[38;5;45mNone\u001b[0m, \u001b[38;5;34m1\u001b[0m, \u001b[38;5;34m102\u001b[0m)         │           \u001b[38;5;34m408\u001b[0m │\n",
+       "└─────────────────────────────────┴────────────────────────┴───────────────┘\n"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    },
+    {
+     "data": {
+      "text/html": [
+       "<pre style=\"white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace\"><span style=\"font-weight: bold\"> Total params: </span><span style=\"color: #00af00; text-decoration-color: #00af00\">43,687,326</span> (166.65 MB)\n",
+       "</pre>\n"
+      ],
+      "text/plain": [
+       "\u001b[1m Total params: \u001b[0m\u001b[38;5;34m43,687,326\u001b[0m (166.65 MB)\n"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    },
+    {
+     "data": {
+      "text/html": [
+       "<pre style=\"white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace\"><span style=\"font-weight: bold\"> Trainable params: </span><span style=\"color: #00af00; text-decoration-color: #00af00\">1,056,670</span> (4.03 MB)\n",
+       "</pre>\n"
+      ],
+      "text/plain": [
+       "\u001b[1m Trainable params: \u001b[0m\u001b[38;5;34m1,056,670\u001b[0m (4.03 MB)\n"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    },
+    {
+     "data": {
+      "text/html": [
+       "<pre style=\"white-space:pre;overflow-x:auto;line-height:normal;font-family:Menlo,'DejaVu Sans Mono',consolas,'Courier New',monospace\"><span style=\"font-weight: bold\"> Non-trainable params: </span><span style=\"color: #00af00; text-decoration-color: #00af00\">42,630,656</span> (162.62 MB)\n",
+       "</pre>\n"
+      ],
+      "text/plain": [
+       "\u001b[1m Non-trainable params: \u001b[0m\u001b[38;5;34m42,630,656\u001b[0m (162.62 MB)\n"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "dummy_input = tf.keras.Input(shape=(224, 224, 3))\n",
+    "output = model(dummy_input)\n",
+    "model.summary()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "48b20aca-6b08-46c8-93f7-f487147263f3",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "checkpoint_cb = tf.keras.callbacks.ModelCheckpoint(\n",
+    "    filepath=\"../models/deep_ib/checkpoints/weights_epoch_{epoch:02d}.weights.h5\",\n",
+    "    save_weights_only=True,\n",
+    "    save_best_only=True,\n",
+    "    monitor=\"val_loss\",\n",
+    "    mode=\"min\",\n",
+    "    verbose=1\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "9434f195-1150-4739-b811-e6019956b631",
+   "metadata": {},
+   "source": [
+    "# Entrenamiento"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 13,
+   "id": "e82441d7-a147-46cb-8fac-47e8b33cf668",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Epoch 1/10\n",
+      "\u001b[1m229/229\u001b[0m \u001b[32m━━━━━━━━━━━━━━━━━━━━\u001b[0m\u001b[37m\u001b[0m \u001b[1m54888s\u001b[0m 241s/step - accuracy: 0.3099 - loss: 2.9483 - val_accuracy: 0.7500 - val_loss: 1.6265\n",
+      "Epoch 2/10\n",
+      "\u001b[1m229/229\u001b[0m \u001b[32m━━━━━━━━━━━━━━━━━━━━\u001b[0m\u001b[37m\u001b[0m \u001b[1m397s\u001b[0m 2s/step - accuracy: 0.4686 - loss: 2.1016 - val_accuracy: 0.2500 - val_loss: 2.3003\n",
+      "Epoch 3/10\n",
+      "\u001b[1m229/229\u001b[0m \u001b[32m━━━━━━━━━━━━━━━━━━━━\u001b[0m\u001b[37m\u001b[0m \u001b[1m390s\u001b[0m 2s/step - accuracy: 0.5333 - loss: 1.8086 - val_accuracy: 0.5000 - val_loss: 3.8137\n",
+      "Epoch 4/10\n",
+      "\u001b[1m229/229\u001b[0m \u001b[32m━━━━━━━━━━━━━━━━━━━━\u001b[0m\u001b[37m\u001b[0m \u001b[1m400s\u001b[0m 2s/step - accuracy: 0.5794 - loss: 1.6303 - val_accuracy: 0.5000 - val_loss: 1.2701\n",
+      "Epoch 5/10\n",
+      "\u001b[1m229/229\u001b[0m \u001b[32m━━━━━━━━━━━━━━━━━━━━\u001b[0m\u001b[37m\u001b[0m \u001b[1m372s\u001b[0m 2s/step - accuracy: 0.6132 - loss: 1.5242 - val_accuracy: 0.7500 - val_loss: 1.1667\n",
+      "Epoch 6/10\n",
+      "\u001b[1m229/229\u001b[0m \u001b[32m━━━━━━━━━━━━━━━━━━━━\u001b[0m\u001b[37m\u001b[0m \u001b[1m351s\u001b[0m 2s/step - accuracy: 0.6494 - loss: 1.4136 - val_accuracy: 1.0000 - val_loss: 0.5133\n",
+      "Epoch 7/10\n",
+      "\u001b[1m229/229\u001b[0m \u001b[32m━━━━━━━━━━━━━━━━━━━━\u001b[0m\u001b[37m\u001b[0m \u001b[1m353s\u001b[0m 2s/step - accuracy: 0.6719 - loss: 1.3246 - val_accuracy: 0.5000 - val_loss: 2.0032\n",
+      "Epoch 8/10\n",
+      "\u001b[1m229/229\u001b[0m \u001b[32m━━━━━━━━━━━━━━━━━━━━\u001b[0m\u001b[37m\u001b[0m \u001b[1m357s\u001b[0m 2s/step - accuracy: 0.6962 - loss: 1.2473 - val_accuracy: 0.5000 - val_loss: 1.1791\n",
+      "Epoch 9/10\n",
+      "\u001b[1m229/229\u001b[0m \u001b[32m━━━━━━━━━━━━━━━━━━━━\u001b[0m\u001b[37m\u001b[0m \u001b[1m382s\u001b[0m 2s/step - accuracy: 0.7126 - loss: 1.1943 - val_accuracy: 0.7500 - val_loss: 1.2438\n",
+      "Epoch 10/10\n",
+      "\u001b[1m229/229\u001b[0m \u001b[32m━━━━━━━━━━━━━━━━━━━━\u001b[0m\u001b[37m\u001b[0m \u001b[1m375s\u001b[0m 2s/step - accuracy: 0.7253 - loss: 1.1506 - val_accuracy: 0.2500 - val_loss: 1.4421\n"
+     ]
+    }
+   ],
+   "source": [
+    "history = model.fit(train_ds, epochs=10, validation_data=test_ds, )"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "c3234c77-8e19-4c02-9423-ca332b3fe706",
+   "metadata": {},
+   "source": [
+    "# Visualización de Resultados"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 14,
+   "id": "aca88f0a-27bf-45e8-924a-12730ed8e6a4",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "2025-06-18 15:19:40.651090: I tensorflow/core/framework/local_rendezvous.cc:407] Local rendezvous is aborting with status: OUT_OF_RANGE: End of sequence\n"
+     ]
+    }
+   ],
+   "source": [
+    "# Listas para almacenar las representaciones latentes y las etiquetas\n",
+    "latents = []\n",
+    "labels = []\n",
+    "\n",
+    "# Desactiva el entrenamiento para evitar muestreo aleatorio (usa solo mu)\n",
+    "for x_batch, y_batch in test_ds:\n",
+    "    mu, _ = model.encode(x_batch)\n",
+    "    latents.append(mu.numpy())\n",
+    "    labels.append(y_batch.numpy())\n",
+    "\n",
+    "# Concatenar todo en arrays\n",
+    "latents = np.concatenate(latents, axis=0)  # (N, 2)\n",
+    "labels = np.concatenate(labels, axis=0)    # (N,)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 15,
+   "id": "3bdd8843-7b10-4f62-ab9f-2157593cb6b0",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\u001b[33mWARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv\u001b[0m\u001b[33m\n",
+      "\u001b[0m\n",
+      "\u001b[1m[\u001b[0m\u001b[34;49mnotice\u001b[0m\u001b[1;39;49m]\u001b[0m\u001b[39;49m A new release of pip is available: \u001b[0m\u001b[31;49m24.0\u001b[0m\u001b[39;49m -> \u001b[0m\u001b[32;49m25.1.1\u001b[0m\n",
+      "\u001b[1m[\u001b[0m\u001b[34;49mnotice\u001b[0m\u001b[1;39;49m]\u001b[0m\u001b[39;49m To update, run: \u001b[0m\u001b[32;49mpip install --upgrade pip\u001b[0m\n"
+     ]
+    }
+   ],
+   "source": [
+    "!pip install plotly --quiet"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 17,
+   "id": "f08dbff0-cc82-4d57-aa56-9077a9d3b806",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "\u001b[33mWARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv\u001b[0m\u001b[33m\n",
+      "\u001b[0m\n",
+      "\u001b[1m[\u001b[0m\u001b[34;49mnotice\u001b[0m\u001b[1;39;49m]\u001b[0m\u001b[39;49m A new release of pip is available: \u001b[0m\u001b[31;49m24.0\u001b[0m\u001b[39;49m -> \u001b[0m\u001b[32;49m25.1.1\u001b[0m\n",
+      "\u001b[1m[\u001b[0m\u001b[34;49mnotice\u001b[0m\u001b[1;39;49m]\u001b[0m\u001b[39;49m To update, run: \u001b[0m\u001b[32;49mpip install --upgrade pip\u001b[0m\n"
+     ]
+    }
+   ],
+   "source": [
+    "!pip install pandas --quiet"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 20,
+   "id": "99c11069-750a-4f9e-8248-4437aba23304",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "application/vnd.plotly.v1+json": {
+       "config": {
+        "plotlyServerURL": "https://plot.ly"
+       },
+       "data": [
+        {
+         "hovertemplate": "color=82<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "82",
+         "marker": {
+          "color": "#636efa",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "82",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "kipNwg==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "OaGEwQ==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "8nVXQQ==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=41<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "41",
+         "marker": {
+          "color": "#EF553B",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "41",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "qyTNwQ==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "0DPYQA==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "Fy3iwQ==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=77<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "77",
+         "marker": {
+          "color": "#00cc96",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "77",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "8/1pwQ==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "uf9Ywg==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "0QoJQQ==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=94<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "94",
+         "marker": {
+          "color": "#ab63fa",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "94",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "VPL8wf+NoML3m6TB",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "9jQXwSihy0EE55NA",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "Y6JuwQl0JsBjw+VA",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=99<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "99",
+         "marker": {
+          "color": "#FFA15A",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "99",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "aB3oQQ==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "yBsYwQ==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "wioqwQ==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=71<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "71",
+         "marker": {
+          "color": "#19d3f3",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "71",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "5XNkQQ==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "NAg1wg==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "+9ZjwQ==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=6<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "6",
+         "marker": {
+          "color": "#FF6692",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "6",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "R/GrQRAgpUGTp1VBeNjHQevVqEHVgO9B1RbhQQ==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "v7dyQaWbekEtktlB7vTMQauRAkI1aBVC4c+/QQ==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "z5TGQWzYzkH2dBhC6NcgQrz3JkIUDDZCqyEIQg==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=2<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "2",
+         "marker": {
+          "color": "#B6E880",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "2",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "DWupQVGch0E=",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "LahPQixS5EE=",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "Cl9CwvkmPcI=",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=10<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "10",
+         "marker": {
+          "color": "#FF97FF",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "10",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "gSSjwfnCSsE=",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "Lw9bQbJUIEE=",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "7DK/wZDcNMA=",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=95<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "95",
+         "marker": {
+          "color": "#FECB52",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "95",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "AgJswR/2VcHhqTnBX9JjwQ==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "VKu0QY/lLkGcL95BSjrlQQ==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "+K+KwusoR8Jn7pfCqxCOwg==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=50<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "50",
+         "marker": {
+          "color": "#636efa",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "50",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "IJJewg==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "bpIvQg==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "JLYmQg==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=51<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "51",
+         "marker": {
+          "color": "#EF553B",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "51",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "DQXLwGNd+sA=",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "/ClWQXBfEkI=",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "/QaDQX/APEI=",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=38<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "38",
+         "marker": {
+          "color": "#00cc96",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "38",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "G/NFwQ==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "po1twQ==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "5rBVQg==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=0<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "0",
+         "marker": {
+          "color": "#ab63fa",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "0",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "5AvOwMzhtcGOBczASaA5wnFT0cG83wHAgZAqws+b9sE=",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "pmCkwa7ZB8ETdaXBZvlfwfp8ccFc9NjAKtopwmcAd8E=",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "FDe6wGWAysHUxLHBo8hFwnNLrMG8/2TBjY81wjAONMI=",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=100<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "100",
+         "marker": {
+          "color": "#FFA15A",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "100",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "/fh6wQ==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "cAlwwA==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "nHtVPg==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=52<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "52",
+         "marker": {
+          "color": "#19d3f3",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "52",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "Pa4EQg==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "gPwTwg==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "VA2MQg==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=42<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "42",
+         "marker": {
+          "color": "#FF6692",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "42",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "FUjdQHmXCEE=",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "qsGKQAS/vMA=",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "+AB0QuC4OUI=",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=1<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "1",
+         "marker": {
+          "color": "#B6E880",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "1",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "uZRLQcOse0HSMpFBjWmIQQ==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "lLDMQYzpG0FT1mhAuon/Pg==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "UNdRwqxqeMJTA4PCD/Fzwg==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=26<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "26",
+         "marker": {
+          "color": "#FF97FF",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "26",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "Rx9SwQ==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "slMhwg==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "9XaKQg==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=32<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "32",
+         "marker": {
+          "color": "#FECB52",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "32",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "Y4uHwKGuS8A=",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "JzC/wv+p3MI=",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "1UfQwRC3xME=",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=24<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "24",
+         "marker": {
+          "color": "#636efa",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "24",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "9oQ/wbMG0cEbJCfB",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "ZF8DQtOvikKP9mFC",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "vXihwQK5EsIEaQfC",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=16<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "16",
+         "marker": {
+          "color": "#EF553B",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "16",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "Q9DrwQ01v8E=",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "NJ2PQmFDg0I=",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "9KZrQXzE5kA=",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=35<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "35",
+         "marker": {
+          "color": "#00cc96",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "35",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "1yk2wQ==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "24nBQQ==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "y75ZwA==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=79<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "79",
+         "marker": {
+          "color": "#ab63fa",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "79",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "T8KeQg==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "4MlMwg==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "1Nsswg==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=11<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "11",
+         "marker": {
+          "color": "#FFA15A",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "11",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "ohhJwVFy1MA=",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "uawWQe09cMA=",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "4m7LQJr7zEA=",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=64<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "64",
+         "marker": {
+          "color": "#19d3f3",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "64",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "IdwzwnbfrcE=",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "mgyNvyLJ0EE=",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "km7jwZB1c8E=",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=91<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "91",
+         "marker": {
+          "color": "#FF6692",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "91",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "RQsZQg==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "fxIIwQ==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "SjGIQg==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=58<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "58",
+         "marker": {
+          "color": "#B6E880",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "58",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "cvRwwg==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "EmXYQQ==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "wRI/wg==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=84<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "84",
+         "marker": {
+          "color": "#FF97FF",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "84",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "wxTMwQ==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "QEOqwQ==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "yyuewQ==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=81<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "81",
+         "marker": {
+          "color": "#FECB52",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "81",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "9opXPq+jpsAdmJM/",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "hK6CwYi8lsEVSRnC",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "6aIewQvDc8EvPcHB",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=93<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "93",
+         "marker": {
+          "color": "#636efa",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "93",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "TvuLwA==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "HAivQg==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "r1Q9Qg==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=89<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "89",
+         "marker": {
+          "color": "#EF553B",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "89",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "2h00wg==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "jPiGwg==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "N8kDwg==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=14<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "14",
+         "marker": {
+          "color": "#00cc96",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "14",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "YUiKwib5PsIEIAfCZsswwg==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "TMVUwnjD7MGVgH/Bln3QwQ==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "WkEvwvsJ4sETcJBAvVo9wQ==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=23<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "23",
+         "marker": {
+          "color": "#ab63fa",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "23",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "1lPZQQ==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "OC3GwA==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "RpMGwQ==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=30<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "30",
+         "marker": {
+          "color": "#FFA15A",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "30",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "rIUjwQ==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "KxKTQQ==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "a0u9Qg==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=61<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "61",
+         "marker": {
+          "color": "#19d3f3",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "61",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "i1KXQg==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "AJxnwg==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "/ks2Qg==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=13<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "13",
+         "marker": {
+          "color": "#FF6692",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "13",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "ZB7QQSB/8zw=",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "MqAuQrQVYkI=",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "WeJ6QNN3QEA=",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=73<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "73",
+         "marker": {
+          "color": "#B6E880",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "73",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "7FuCwg==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "q3R6QQ==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "1SCiQQ==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=33<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "33",
+         "marker": {
+          "color": "#FF97FF",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "33",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "YhG2Pw==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "Vkk3wg==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "tm0fwg==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=31<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "31",
+         "marker": {
+          "color": "#FECB52",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "31",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "s6w8wQ==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "uiDNwQ==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "0Re2wQ==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=56<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "56",
+         "marker": {
+          "color": "#636efa",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "56",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "MsV3Qg==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "Hl80wQ==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "iKO/QQ==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=70<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "70",
+         "marker": {
+          "color": "#EF553B",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "70",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "7yPiQQ==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "xgRAQQ==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "dcISQQ==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=3<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "3",
+         "marker": {
+          "color": "#00cc96",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "3",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "b6cqwvwgOMJvAB7C",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "+pw7wqK1K8ITXQDC",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "LuKiQbNUjkGiIx9A",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=37<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "37",
+         "marker": {
+          "color": "#ab63fa",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "37",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "w1wswkKGBsI=",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "G2GswtbCgMI=",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "zMRzQvLUQ0I=",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=28<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "28",
+         "marker": {
+          "color": "#FFA15A",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "28",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "k1jjwQ==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "VFOTPg==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "jBTbQA==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=48<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "48",
+         "marker": {
+          "color": "#19d3f3",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "48",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "SoCNwg==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "qEhnQA==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "9dZhQg==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=4<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "4",
+         "marker": {
+          "color": "#FF6692",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "4",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "EgQkQjRZFkJB/A1ChMUZQpp/MEKSj0VCLqtFQg==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "j50pQUbi8kCapw5BehEzQZVNLEEOB2tBblxLQQ==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "gwPUwcMYtcEPYdHBpKnYwfddz8EbCNfBV5DiwQ==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=55<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "55",
+         "marker": {
+          "color": "#B6E880",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "55",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "QFwpQg==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "tsbOwg==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "9sE9QQ==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=80<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "80",
+         "marker": {
+          "color": "#FF97FF",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "80",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "dVZ8Qg==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "rpJ1wA==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "N87bQQ==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=83<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "83",
+         "marker": {
+          "color": "#FECB52",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "83",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "pKnDvQ==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "d7THQA==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "SWPCQA==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=67<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "67",
+         "marker": {
+          "color": "#636efa",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "67",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "PH96Pw==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "K6ouQQ==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "gJR3vg==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=5<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "5",
+         "marker": {
+          "color": "#EF553B",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "5",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "7xBQwQ==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "kBxgQg==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "z8nowQ==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=74<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "74",
+         "marker": {
+          "color": "#00cc96",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "74",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "OWmGwA==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "ismIPw==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "lWVmQQ==",
+          "dtype": "f4"
+         }
+        },
+        {
+         "hovertemplate": "color=68<br>z1=%{x}<br>z2=%{y}<br>z3=%{z}<extra></extra>",
+         "legendgroup": "68",
+         "marker": {
+          "color": "#ab63fa",
+          "opacity": 0.7,
+          "symbol": "circle"
+         },
+         "mode": "markers",
+         "name": "68",
+         "scene": "scene",
+         "showlegend": true,
+         "type": "scatter3d",
+         "x": {
+          "bdata": "M53qwA==",
+          "dtype": "f4"
+         },
+         "y": {
+          "bdata": "jjdMQQ==",
+          "dtype": "f4"
+         },
+         "z": {
+          "bdata": "nlHpPw==",
+          "dtype": "f4"
+         }
+        }
+       ],
+       "layout": {
+        "legend": {
+         "title": {
+          "text": "color"
+         },
+         "tracegroupgap": 0
+        },
+        "margin": {
+         "t": 60
+        },
+        "scene": {
+         "domain": {
+          "x": [
+           0,
+           1
+          ],
+          "y": [
+           0,
+           1
+          ]
+         },
+         "xaxis": {
+          "title": {
+           "text": "z1"
+          }
+         },
+         "yaxis": {
+          "title": {
+           "text": "z2"
+          }
+         },
+         "zaxis": {
+          "title": {
+           "text": "z3"
+          }
+         }
+        },
+        "template": {
+         "data": {
+          "bar": [
+           {
+            "error_x": {
+             "color": "#2a3f5f"
+            },
+            "error_y": {
+             "color": "#2a3f5f"
+            },
+            "marker": {
+             "line": {
+              "color": "#E5ECF6",
+              "width": 0.5
+             },
+             "pattern": {
+              "fillmode": "overlay",
+              "size": 10,
+              "solidity": 0.2
+             }
+            },
+            "type": "bar"
+           }
+          ],
+          "barpolar": [
+           {
+            "marker": {
+             "line": {
+              "color": "#E5ECF6",
+              "width": 0.5
+             },
+             "pattern": {
+              "fillmode": "overlay",
+              "size": 10,
+              "solidity": 0.2
+             }
+            },
+            "type": "barpolar"
+           }
+          ],
+          "carpet": [
+           {
+            "aaxis": {
+             "endlinecolor": "#2a3f5f",
+             "gridcolor": "white",
+             "linecolor": "white",
+             "minorgridcolor": "white",
+             "startlinecolor": "#2a3f5f"
+            },
+            "baxis": {
+             "endlinecolor": "#2a3f5f",
+             "gridcolor": "white",
+             "linecolor": "white",
+             "minorgridcolor": "white",
+             "startlinecolor": "#2a3f5f"
+            },
+            "type": "carpet"
+           }
+          ],
+          "choropleth": [
+           {
+            "colorbar": {
+             "outlinewidth": 0,
+             "ticks": ""
+            },
+            "type": "choropleth"
+           }
+          ],
+          "contour": [
+           {
+            "colorbar": {
+             "outlinewidth": 0,
+             "ticks": ""
+            },
+            "colorscale": [
+             [
+              0,
+              "#0d0887"
+             ],
+             [
+              0.1111111111111111,
+              "#46039f"
+             ],
+             [
+              0.2222222222222222,
+              "#7201a8"
+             ],
+             [
+              0.3333333333333333,
+              "#9c179e"
+             ],
+             [
+              0.4444444444444444,
+              "#bd3786"
+             ],
+             [
+              0.5555555555555556,
+              "#d8576b"
+             ],
+             [
+              0.6666666666666666,
+              "#ed7953"
+             ],
+             [
+              0.7777777777777778,
+              "#fb9f3a"
+             ],
+             [
+              0.8888888888888888,
+              "#fdca26"
+             ],
+             [
+              1,
+              "#f0f921"
+             ]
+            ],
+            "type": "contour"
+           }
+          ],
+          "contourcarpet": [
+           {
+            "colorbar": {
+             "outlinewidth": 0,
+             "ticks": ""
+            },
+            "type": "contourcarpet"
+           }
+          ],
+          "heatmap": [
+           {
+            "colorbar": {
+             "outlinewidth": 0,
+             "ticks": ""
+            },
+            "colorscale": [
+             [
+              0,
+              "#0d0887"
+             ],
+             [
+              0.1111111111111111,
+              "#46039f"
+             ],
+             [
+              0.2222222222222222,
+              "#7201a8"
+             ],
+             [
+              0.3333333333333333,
+              "#9c179e"
+             ],
+             [
+              0.4444444444444444,
+              "#bd3786"
+             ],
+             [
+              0.5555555555555556,
+              "#d8576b"
+             ],
+             [
+              0.6666666666666666,
+              "#ed7953"
+             ],
+             [
+              0.7777777777777778,
+              "#fb9f3a"
+             ],
+             [
+              0.8888888888888888,
+              "#fdca26"
+             ],
+             [
+              1,
+              "#f0f921"
+             ]
+            ],
+            "type": "heatmap"
+           }
+          ],
+          "histogram": [
+           {
+            "marker": {
+             "pattern": {
+              "fillmode": "overlay",
+              "size": 10,
+              "solidity": 0.2
+             }
+            },
+            "type": "histogram"
+           }
+          ],
+          "histogram2d": [
+           {
+            "colorbar": {
+             "outlinewidth": 0,
+             "ticks": ""
+            },
+            "colorscale": [
+             [
+              0,
+              "#0d0887"
+             ],
+             [
+              0.1111111111111111,
+              "#46039f"
+             ],
+             [
+              0.2222222222222222,
+              "#7201a8"
+             ],
+             [
+              0.3333333333333333,
+              "#9c179e"
+             ],
+             [
+              0.4444444444444444,
+              "#bd3786"
+             ],
+             [
+              0.5555555555555556,
+              "#d8576b"
+             ],
+             [
+              0.6666666666666666,
+              "#ed7953"
+             ],
+             [
+              0.7777777777777778,
+              "#fb9f3a"
+             ],
+             [
+              0.8888888888888888,
+              "#fdca26"
+             ],
+             [
+              1,
+              "#f0f921"
+             ]
+            ],
+            "type": "histogram2d"
+           }
+          ],
+          "histogram2dcontour": [
+           {
+            "colorbar": {
+             "outlinewidth": 0,
+             "ticks": ""
+            },
+            "colorscale": [
+             [
+              0,
+              "#0d0887"
+             ],
+             [
+              0.1111111111111111,
+              "#46039f"
+             ],
+             [
+              0.2222222222222222,
+              "#7201a8"
+             ],
+             [
+              0.3333333333333333,
+              "#9c179e"
+             ],
+             [
+              0.4444444444444444,
+              "#bd3786"
+             ],
+             [
+              0.5555555555555556,
+              "#d8576b"
+             ],
+             [
+              0.6666666666666666,
+              "#ed7953"
+             ],
+             [
+              0.7777777777777778,
+              "#fb9f3a"
+             ],
+             [
+              0.8888888888888888,
+              "#fdca26"
+             ],
+             [
+              1,
+              "#f0f921"
+             ]
+            ],
+            "type": "histogram2dcontour"
+           }
+          ],
+          "mesh3d": [
+           {
+            "colorbar": {
+             "outlinewidth": 0,
+             "ticks": ""
+            },
+            "type": "mesh3d"
+           }
+          ],
+          "parcoords": [
+           {
+            "line": {
+             "colorbar": {
+              "outlinewidth": 0,
+              "ticks": ""
+             }
+            },
+            "type": "parcoords"
+           }
+          ],
+          "pie": [
+           {
+            "automargin": true,
+            "type": "pie"
+           }
+          ],
+          "scatter": [
+           {
+            "fillpattern": {
+             "fillmode": "overlay",
+             "size": 10,
+             "solidity": 0.2
+            },
+            "type": "scatter"
+           }
+          ],
+          "scatter3d": [
+           {
+            "line": {
+             "colorbar": {
+              "outlinewidth": 0,
+              "ticks": ""
+             }
+            },
+            "marker": {
+             "colorbar": {
+              "outlinewidth": 0,
+              "ticks": ""
+             }
+            },
+            "type": "scatter3d"
+           }
+          ],
+          "scattercarpet": [
+           {
+            "marker": {
+             "colorbar": {
+              "outlinewidth": 0,
+              "ticks": ""
+             }
+            },
+            "type": "scattercarpet"
+           }
+          ],
+          "scattergeo": [
+           {
+            "marker": {
+             "colorbar": {
+              "outlinewidth": 0,
+              "ticks": ""
+             }
+            },
+            "type": "scattergeo"
+           }
+          ],
+          "scattergl": [
+           {
+            "marker": {
+             "colorbar": {
+              "outlinewidth": 0,
+              "ticks": ""
+             }
+            },
+            "type": "scattergl"
+           }
+          ],
+          "scattermap": [
+           {
+            "marker": {
+             "colorbar": {
+              "outlinewidth": 0,
+              "ticks": ""
+             }
+            },
+            "type": "scattermap"
+           }
+          ],
+          "scattermapbox": [
+           {
+            "marker": {
+             "colorbar": {
+              "outlinewidth": 0,
+              "ticks": ""
+             }
+            },
+            "type": "scattermapbox"
+           }
+          ],
+          "scatterpolar": [
+           {
+            "marker": {
+             "colorbar": {
+              "outlinewidth": 0,
+              "ticks": ""
+             }
+            },
+            "type": "scatterpolar"
+           }
+          ],
+          "scatterpolargl": [
+           {
+            "marker": {
+             "colorbar": {
+              "outlinewidth": 0,
+              "ticks": ""
+             }
+            },
+            "type": "scatterpolargl"
+           }
+          ],
+          "scatterternary": [
+           {
+            "marker": {
+             "colorbar": {
+              "outlinewidth": 0,
+              "ticks": ""
+             }
+            },
+            "type": "scatterternary"
+           }
+          ],
+          "surface": [
+           {
+            "colorbar": {
+             "outlinewidth": 0,
+             "ticks": ""
+            },
+            "colorscale": [
+             [
+              0,
+              "#0d0887"
+             ],
+             [
+              0.1111111111111111,
+              "#46039f"
+             ],
+             [
+              0.2222222222222222,
+              "#7201a8"
+             ],
+             [
+              0.3333333333333333,
+              "#9c179e"
+             ],
+             [
+              0.4444444444444444,
+              "#bd3786"
+             ],
+             [
+              0.5555555555555556,
+              "#d8576b"
+             ],
+             [
+              0.6666666666666666,
+              "#ed7953"
+             ],
+             [
+              0.7777777777777778,
+              "#fb9f3a"
+             ],
+             [
+              0.8888888888888888,
+              "#fdca26"
+             ],
+             [
+              1,
+              "#f0f921"
+             ]
+            ],
+            "type": "surface"
+           }
+          ],
+          "table": [
+           {
+            "cells": {
+             "fill": {
+              "color": "#EBF0F8"
+             },
+             "line": {
+              "color": "white"
+             }
+            },
+            "header": {
+             "fill": {
+              "color": "#C8D4E3"
+             },
+             "line": {
+              "color": "white"
+             }
+            },
+            "type": "table"
+           }
+          ]
+         },
+         "layout": {
+          "annotationdefaults": {
+           "arrowcolor": "#2a3f5f",
+           "arrowhead": 0,
+           "arrowwidth": 1
+          },
+          "autotypenumbers": "strict",
+          "coloraxis": {
+           "colorbar": {
+            "outlinewidth": 0,
+            "ticks": ""
+           }
+          },
+          "colorscale": {
+           "diverging": [
+            [
+             0,
+             "#8e0152"
+            ],
+            [
+             0.1,
+             "#c51b7d"
+            ],
+            [
+             0.2,
+             "#de77ae"
+            ],
+            [
+             0.3,
+             "#f1b6da"
+            ],
+            [
+             0.4,
+             "#fde0ef"
+            ],
+            [
+             0.5,
+             "#f7f7f7"
+            ],
+            [
+             0.6,
+             "#e6f5d0"
+            ],
+            [
+             0.7,
+             "#b8e186"
+            ],
+            [
+             0.8,
+             "#7fbc41"
+            ],
+            [
+             0.9,
+             "#4d9221"
+            ],
+            [
+             1,
+             "#276419"
+            ]
+           ],
+           "sequential": [
+            [
+             0,
+             "#0d0887"
+            ],
+            [
+             0.1111111111111111,
+             "#46039f"
+            ],
+            [
+             0.2222222222222222,
+             "#7201a8"
+            ],
+            [
+             0.3333333333333333,
+             "#9c179e"
+            ],
+            [
+             0.4444444444444444,
+             "#bd3786"
+            ],
+            [
+             0.5555555555555556,
+             "#d8576b"
+            ],
+            [
+             0.6666666666666666,
+             "#ed7953"
+            ],
+            [
+             0.7777777777777778,
+             "#fb9f3a"
+            ],
+            [
+             0.8888888888888888,
+             "#fdca26"
+            ],
+            [
+             1,
+             "#f0f921"
+            ]
+           ],
+           "sequentialminus": [
+            [
+             0,
+             "#0d0887"
+            ],
+            [
+             0.1111111111111111,
+             "#46039f"
+            ],
+            [
+             0.2222222222222222,
+             "#7201a8"
+            ],
+            [
+             0.3333333333333333,
+             "#9c179e"
+            ],
+            [
+             0.4444444444444444,
+             "#bd3786"
+            ],
+            [
+             0.5555555555555556,
+             "#d8576b"
+            ],
+            [
+             0.6666666666666666,
+             "#ed7953"
+            ],
+            [
+             0.7777777777777778,
+             "#fb9f3a"
+            ],
+            [
+             0.8888888888888888,
+             "#fdca26"
+            ],
+            [
+             1,
+             "#f0f921"
+            ]
+           ]
+          },
+          "colorway": [
+           "#636efa",
+           "#EF553B",
+           "#00cc96",
+           "#ab63fa",
+           "#FFA15A",
+           "#19d3f3",
+           "#FF6692",
+           "#B6E880",
+           "#FF97FF",
+           "#FECB52"
+          ],
+          "font": {
+           "color": "#2a3f5f"
+          },
+          "geo": {
+           "bgcolor": "white",
+           "lakecolor": "white",
+           "landcolor": "#E5ECF6",
+           "showlakes": true,
+           "showland": true,
+           "subunitcolor": "white"
+          },
+          "hoverlabel": {
+           "align": "left"
+          },
+          "hovermode": "closest",
+          "mapbox": {
+           "style": "light"
+          },
+          "paper_bgcolor": "white",
+          "plot_bgcolor": "#E5ECF6",
+          "polar": {
+           "angularaxis": {
+            "gridcolor": "white",
+            "linecolor": "white",
+            "ticks": ""
+           },
+           "bgcolor": "#E5ECF6",
+           "radialaxis": {
+            "gridcolor": "white",
+            "linecolor": "white",
+            "ticks": ""
+           }
+          },
+          "scene": {
+           "xaxis": {
+            "backgroundcolor": "#E5ECF6",
+            "gridcolor": "white",
+            "gridwidth": 2,
+            "linecolor": "white",
+            "showbackground": true,
+            "ticks": "",
+            "zerolinecolor": "white"
+           },
+           "yaxis": {
+            "backgroundcolor": "#E5ECF6",
+            "gridcolor": "white",
+            "gridwidth": 2,
+            "linecolor": "white",
+            "showbackground": true,
+            "ticks": "",
+            "zerolinecolor": "white"
+           },
+           "zaxis": {
+            "backgroundcolor": "#E5ECF6",
+            "gridcolor": "white",
+            "gridwidth": 2,
+            "linecolor": "white",
+            "showbackground": true,
+            "ticks": "",
+            "zerolinecolor": "white"
+           }
+          },
+          "shapedefaults": {
+           "line": {
+            "color": "#2a3f5f"
+           }
+          },
+          "ternary": {
+           "aaxis": {
+            "gridcolor": "white",
+            "linecolor": "white",
+            "ticks": ""
+           },
+           "baxis": {
+            "gridcolor": "white",
+            "linecolor": "white",
+            "ticks": ""
+           },
+           "bgcolor": "#E5ECF6",
+           "caxis": {
+            "gridcolor": "white",
+            "linecolor": "white",
+            "ticks": ""
+           }
+          },
+          "title": {
+           "x": 0.05
+          },
+          "xaxis": {
+           "automargin": true,
+           "gridcolor": "white",
+           "linecolor": "white",
+           "ticks": "",
+           "title": {
+            "standoff": 15
+           },
+           "zerolinecolor": "white",
+           "zerolinewidth": 2
+          },
+          "yaxis": {
+           "automargin": true,
+           "gridcolor": "white",
+           "linecolor": "white",
+           "ticks": "",
+           "title": {
+            "standoff": 15
+           },
+           "zerolinecolor": "white",
+           "zerolinewidth": 2
+          }
+         }
+        },
+        "title": {
+         "text": "Espacio latente 3D - Deep IB"
+        }
+       }
+      }
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "import plotly.express as px\n",
+    "import pandas as pd\n",
+    "\n",
+    "df = pd.DataFrame({\n",
+    "    \"z1\": latents[:100, 0],\n",
+    "    \"z2\": latents[:100, 1],\n",
+    "    \"z3\": latents[:100, 2],\n",
+    "    \"label\": labels[:100]\n",
+    "})\n",
+    "\n",
+    "fig = px.scatter_3d(df, x=\"z1\", y=\"z2\", z=\"z3\", color=df[\"label\"].astype(str),\n",
+    "                    opacity=0.7, size_max=10)\n",
+    "fig.update_layout(title=\"Espacio latente 3D - Deep IB\")\n",
+    "fig.show()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "9fcc6581-b122-42e0-a039-610c33c2fb65",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Graficar\n",
+    "plt.figure(figsize=(8, 6))\n",
+    "scatter = plt.scatter(latents[:, 0], latents[:, 1], c=labels, cmap='tab20', alpha=0.7, s=15)\n",
+    "plt.colorbar(scatter, ticks=range(len(np.unique(labels))))\n",
+    "plt.xlabel(\"z₁\")\n",
+    "plt.ylabel(\"z₂\")\n",
+    "plt.title(\"Espacio latente (mu) - Deep Information Bottleneck\")\n",
+    "plt.grid(True)\n",
+    "plt.tight_layout()\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "8310e084-2715-459b-a1fd-010dcfb13a4b",
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "1213e285-d5bc-4453-8ac1-b2d213211046",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "history = model.fit(train_ds, epochs=10, validation_data=test_ds)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "35f30a30-df1c-4946-affc-f00e1ed4c660",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Listas para almacenar las representaciones latentes y las etiquetas\n",
+    "latents = []\n",
+    "labels = []\n",
+    "\n",
+    "# Desactiva el entrenamiento para evitar muestreo aleatorio (usa solo mu)\n",
+    "for x_batch, y_batch in test_ds:\n",
+    "    mu, _ = model.encode(x_batch)\n",
+    "    latents.append(mu.numpy())\n",
+    "    labels.append(y_batch.numpy())\n",
+    "\n",
+    "# Concatenar todo en arrays\n",
+    "latents = np.concatenate(latents, axis=0)  # (N, 2)\n",
+    "labels = np.concatenate(labels, axis=0)    # (N,)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "4c31bb4d-fc35-46e5-bbeb-58f063ab638e",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Graficar\n",
+    "plt.figure(figsize=(8, 6))\n",
+    "scatter = plt.scatter(latents[:, 0], latents[:, 1], c=labels, cmap='tab20', alpha=0.7, s=15)\n",
+    "plt.colorbar(scatter, ticks=range(len(np.unique(labels))))\n",
+    "plt.xlabel(\"z₁\")\n",
+    "plt.ylabel(\"z₂\")\n",
+    "plt.title(\"Espacio latente (mu) - Deep Information Bottleneck\")\n",
+    "plt.grid(True)\n",
+    "plt.tight_layout()\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "18f590a2-95d4-4213-8687-23a0c98891c8",
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.11.13"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
